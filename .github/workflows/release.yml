@@ -77,7 +77,7 @@ jobs:
             else
               # For major and minor tags, delete if exists and recreate
               # Check if tag exists locally and delete it
-              if git tag -l "$tag" | grep -q "^$tag$"; then
+              if [ -n "$(git tag -l "$tag")" ]; then
                 echo "Deleting existing local tag: $tag"
                 git tag -d "$tag"
               fi
