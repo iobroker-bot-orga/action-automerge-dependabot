@@ -188,16 +188,29 @@ runs:
                 }
                 
                 // Check update type (only semver: types are supported)
+                // Hierarchical matching: 
+                // - semver:patch matches only patch
+                // - semver:minor matches patch OR minor
+                // - semver:major matches patch OR minor OR major
                 let updateTypeMatches = false;
                 if (match.update_type) {
                   const matchType = match.update_type;
                   if (matchType.startsWith('semver:')) {
                     const semverType = matchType.replace('semver:', '');
-                    updateTypeMatches = (updateType === semverType);
+                    
+                    // Implement hierarchical matching
+                    if (semverType === 'patch') {
+                      updateTypeMatches = (updateType === 'patch');
+                    } else if (semverType === 'minor') {
+                      updateTypeMatches = (updateType === 'patch' || updateType === 'minor');
+                    } else if (semverType === 'major') {
+                      updateTypeMatches = (updateType === 'patch' || updateType === 'minor' || updateType === 'major');
+                    }
+                    
                     if (updateTypeMatches) {
-                      console.log(`  ✅ Update type matches: ${updateType}`);
+                      console.log(`  ✅ Update type matches: ${updateType} is included in ${semverType} rule`);
                     } else {
-                      console.log(`  ❌ Update type mismatch: expected ${semverType}, got ${updateType}`);
+                      console.log(`  ❌ Update type mismatch: ${updateType} is not included in ${semverType} rule`);
                     }
                   } else {
                     console.log(`  ⚠️  Unsupported update_type format: ${matchType} (only 'semver:' prefixes are supported)`);
