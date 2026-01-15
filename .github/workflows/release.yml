@@ -62,6 +62,9 @@ jobs:
           echo "  - v$MINOR (major.minor)"
           echo "  - v$MAJOR (major only)"
           
+          # Fetch remote tags once for efficiency
+          REMOTE_TAGS=$(git ls-remote --tags origin)
+          
           # Create/update each tag
           for tag in "${TAGS[@]}"; do
             # For the full version tag, just create it (we already verified it doesn't exist)
@@ -72,15 +75,15 @@ jobs:
             else
               # For major and minor tags, delete if exists and recreate
               # Check if tag exists locally and delete it
-              if git rev-parse "$tag" >/dev/null 2>&1; then
+              if git tag -l "$tag" | grep -q "^$tag$"; then
                 echo "Deleting existing local tag: $tag"
                 git tag -d "$tag"
               fi
               
               # Check if tag exists remotely and delete it
-              if git ls-remote --tags origin | grep -q "refs/tags/$tag$"; then
+              if echo "$REMOTE_TAGS" | grep -q "refs/tags/$tag$"; then
                 echo "Deleting existing remote tag: $tag"
-                git push --delete origin "$tag" || true
+                git push --delete origin "$tag"
               fi
               
               # Create new tag
