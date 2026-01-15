@@ -19,7 +19,7 @@ inputs:
   merge-method:
     description: 'Merge method to use (merge, squash, or rebase)'
     required: false
-    default: 'squash'
+    default: 'merge'
   
   wait-for-checks:
     description: 'Wait for other checks to complete before merging'
