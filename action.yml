@@ -355,7 +355,8 @@ runs:
               console.log('='.repeat(80));
               console.log('Final results of all checked workflows:');
               otherChecks.forEach(check => {
-                console.log(`  ${getCheckIcon(check)} ${check.name}: ${check.conclusion}`);
+                const conclusionText = check.status === 'completed' ? check.conclusion : check.status;
+                console.log(`  ${getCheckIcon(check)} ${check.name}: ${conclusionText}`);
               });
               console.log('-'.repeat(80));
               console.log('The following checks failed:');
