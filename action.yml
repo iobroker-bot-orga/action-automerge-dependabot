@@ -286,6 +286,17 @@ runs:
           const prNumber = ${{ github.event.pull_request.number }};
           const headSha = '${{ github.event.pull_request.head.sha }}';
           
+          // Helper function to check if a conclusion is successful
+          const isSuccessfulConclusion = (conclusion) => {
+            return conclusion === 'success' || conclusion === 'skipped' || conclusion === 'neutral';
+          };
+          
+          // Helper function to get icon for a check
+          const getCheckIcon = (check) => {
+            if (check.status !== 'completed') return '⏳';
+            return isSuccessfulConclusion(check.conclusion) ? '✅' : '❌';
+          };
+          
           console.log('='.repeat(80));
           console.log('WAITING FOR CI CHECKS');
           console.log('='.repeat(80));
@@ -297,6 +308,7 @@ runs:
           const maxWaitTime = ${{ inputs.max-wait-time }} * 1000; // Convert to milliseconds
           const pollInterval = 30 * 1000; // 30 seconds
           const startTime = Date.now();
+          let otherChecks = []; // Declare outside loop for timeout handler access
           
           while (Date.now() - startTime < maxWaitTime) {
             // Get check runs for the commit
@@ -308,7 +320,7 @@ runs:
             });
             
             // Filter out this workflow
-            const otherChecks = checkRuns.check_runs.filter(check => 
+            otherChecks = checkRuns.check_runs.filter(check => 
               check.name !== 'auto-merge' && 
               check.name !== context.job
             );
@@ -328,11 +340,11 @@ runs:
             );
             
             const failed = otherChecks.filter(check => 
-              check.status === 'completed' && check.conclusion !== 'success' && check.conclusion !== 'skipped'
+              check.status === 'completed' && !isSuccessfulConclusion(check.conclusion)
             );
             
             const successful = otherChecks.filter(check => 
-              check.status === 'completed' && (check.conclusion === 'success' || check.conclusion === 'skipped')
+              check.status === 'completed' && isSuccessfulConclusion(check.conclusion)
             );
             
             console.log(`Status: ${successful.length} successful, ${pending.length} pending, ${failed.length} failed`);
@@ -341,6 +353,12 @@ runs:
               console.log('\n' + '='.repeat(80));
               console.log('❌ CHECK FAILURE DETECTED');
               console.log('='.repeat(80));
+              console.log('Final results of all checked workflows:');
+              otherChecks.forEach(check => {
+                const conclusionText = check.status === 'completed' ? check.conclusion : check.status;
+                console.log(`  ${getCheckIcon(check)} ${check.name}: ${conclusionText}`);
+              });
+              console.log('-'.repeat(80));
               console.log('The following checks failed:');
               failed.forEach(check => {
                 console.log(`  ❌ ${check.name}`);
@@ -360,8 +378,9 @@ runs:
               console.log('\n' + '='.repeat(80));
               console.log('✅ ALL CHECKS PASSED');
               console.log('='.repeat(80));
-              successful.forEach(check => {
-                console.log(`  ✅ ${check.name}: ${check.conclusion}`);
+              console.log('Final results of all checked workflows:');
+              otherChecks.forEach(check => {
+                console.log(`  ${getCheckIcon(check)} ${check.name}: ${check.conclusion}`);
               });
               console.log('='.repeat(80));
               console.log('DECISION: Proceeding with automerge');
@@ -384,6 +403,17 @@ runs:
           console.log('⏱️  TIMEOUT');
           console.log('='.repeat(80));
           console.log('Checks did not complete within the timeout period');
+          
+          // Log final results of all workflows at timeout
+          if (otherChecks && otherChecks.length > 0) {
+            console.log('-'.repeat(80));
+            console.log('Final results of all checked workflows at timeout:');
+            otherChecks.forEach(check => {
+              const conclusionText = check.status === 'completed' ? check.conclusion : check.status;
+              console.log(`  ${getCheckIcon(check)} ${check.name}: ${conclusionText}`);
+            });
+          }
+          
           console.log('='.repeat(80));
           core.setFailed('Timeout waiting for checks to complete');
           core.setOutput('checks_passed', 'false');
