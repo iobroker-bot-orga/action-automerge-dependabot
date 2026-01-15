@@ -286,6 +286,17 @@ runs:
           const prNumber = ${{ github.event.pull_request.number }};
           const headSha = '${{ github.event.pull_request.head.sha }}';
           
+          // Helper function to check if a conclusion is successful
+          const isSuccessfulConclusion = (conclusion) => {
+            return conclusion === 'success' || conclusion === 'skipped' || conclusion === 'neutral';
+          };
+          
+          // Helper function to get icon for a check
+          const getCheckIcon = (check) => {
+            if (check.status !== 'completed') return '⏳';
+            return isSuccessfulConclusion(check.conclusion) ? '✅' : '❌';
+          };
+          
           console.log('='.repeat(80));
           console.log('WAITING FOR CI CHECKS');
           console.log('='.repeat(80));
@@ -328,11 +339,11 @@ runs:
             );
             
             const failed = otherChecks.filter(check => 
-              check.status === 'completed' && check.conclusion !== 'success' && check.conclusion !== 'skipped' && check.conclusion !== 'neutral'
+              check.status === 'completed' && !isSuccessfulConclusion(check.conclusion)
             );
             
             const successful = otherChecks.filter(check => 
-              check.status === 'completed' && (check.conclusion === 'success' || check.conclusion === 'skipped' || check.conclusion === 'neutral')
+              check.status === 'completed' && isSuccessfulConclusion(check.conclusion)
             );
             
             console.log(`Status: ${successful.length} successful, ${pending.length} pending, ${failed.length} failed`);
@@ -343,8 +354,7 @@ runs:
               console.log('='.repeat(80));
               console.log('Final results of all checked workflows:');
               otherChecks.forEach(check => {
-                const icon = (check.conclusion === 'success' || check.conclusion === 'skipped' || check.conclusion === 'neutral') ? '✅' : '❌';
-                console.log(`  ${icon} ${check.name}: ${check.conclusion}`);
+                console.log(`  ${getCheckIcon(check)} ${check.name}: ${check.conclusion}`);
               });
               console.log('-'.repeat(80));
               console.log('The following checks failed:');
@@ -368,8 +378,7 @@ runs:
               console.log('='.repeat(80));
               console.log('Final results of all checked workflows:');
               otherChecks.forEach(check => {
-                const icon = (check.conclusion === 'success' || check.conclusion === 'skipped' || check.conclusion === 'neutral') ? '✅' : '❌';
-                console.log(`  ${icon} ${check.name}: ${check.conclusion}`);
+                console.log(`  ${getCheckIcon(check)} ${check.name}: ${check.conclusion}`);
               });
               console.log('='.repeat(80));
               console.log('DECISION: Proceeding with automerge');
@@ -398,11 +407,8 @@ runs:
             console.log('-'.repeat(80));
             console.log('Final results of all checked workflows at timeout:');
             otherChecks.forEach(check => {
-              const statusIcon = check.status === 'completed' ? '✓' : '⏳';
               const conclusionText = check.status === 'completed' ? check.conclusion : check.status;
-              const icon = (check.conclusion === 'success' || check.conclusion === 'skipped' || check.conclusion === 'neutral') ? '✅' : 
-                          (check.status !== 'completed') ? '⏳' : '❌';
-              console.log(`  ${icon} ${check.name}: ${conclusionText}`);
+              console.log(`  ${getCheckIcon(check)} ${check.name}: ${conclusionText}`);
             });
           }
           
