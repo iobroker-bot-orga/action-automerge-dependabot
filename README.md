@@ -80,11 +80,11 @@ Create a file at `.github/auto-merge.yml` in your repository to define merge rul
 ```yaml
 # Recommended configuration
 - match:
-    # Only merge patches for production dependencies
+    # Merge patch updates for production dependencies
     dependency_type: production
     update_type: "semver:patch"
 - match:
-    # Development dependencies can have minor updates too
+    # Merge patch and minor updates for development dependencies
     dependency_type: development
     update_type: "semver:minor"
 ```
@@ -93,34 +93,44 @@ Create a file at `.github/auto-merge.yml` in your repository to define merge rul
 
 - `dependency_type`: `production` or `development`
 - `update_type`: `semver:patch`, `semver:minor`, or `semver:major`
+  - **Hierarchical matching**: Higher version changes include all lower changes
+    - `semver:patch` - Only patch updates (e.g., 1.0.0 → 1.0.1)
+    - `semver:minor` - Patch **and** minor updates (e.g., 1.0.0 → 1.0.1 or 1.0.0 → 1.1.0)
+    - `semver:major` - Patch, minor, **and** major updates (e.g., 1.0.0 → 1.0.1, 1.0.0 → 1.1.0, or 1.0.0 → 2.0.0)
 
 #### Examples
 
-Allow all patch updates:
+Allow all patch updates only:
 ```yaml
 - match:
     update_type: "semver:patch"
 ```
 
-Allow minor updates for development dependencies:
+Allow patch and minor updates for development dependencies:
 ```yaml
 - match:
     dependency_type: development
     update_type: "semver:minor"
 ```
 
-Multiple rules:
+Allow all updates (patch, minor, and major) for development dependencies:
+```yaml
+- match:
+    dependency_type: development
+    update_type: "semver:major"
+```
+
+Multiple rules for different dependency types:
 ```yaml
 - match:
     dependency_type: production
-    update_type: "semver:patch"
+    update_type: "semver:patch"  # Only patch for production
 - match:
     dependency_type: development
-    update_type: "semver:minor"
-- match:
-    dependency_type: development
-    update_type: "semver:patch"
+    update_type: "semver:minor"  # Patch and minor for development
 ```
+
+**Note**: With hierarchical matching, you typically only need one rule per dependency type. For example, if you specify `semver:minor`, you don't need a separate rule for `semver:patch` since minor already includes patch updates.
 
 ### Default Rules
 
