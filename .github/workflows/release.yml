@@ -97,14 +97,12 @@ jobs:
           # Delete remote tags in batch if any need to be deleted
           if [ ${#TAGS_TO_DELETE[@]} -gt 0 ]; then
             echo "Deleting remote tags: ${TAGS_TO_DELETE[*]}"
-            for tag in "${TAGS_TO_DELETE[@]}"; do
-              git push --delete origin "$tag"
-            done
+            git push --delete origin "${TAGS_TO_DELETE[@]}"
           fi
           
-          # Push all newly created tags in batch
+          # Push all newly created tags in batch (force push to handle recreation)
           echo "Pushing tags to remote: ${TAGS[*]}"
-          git push origin "${TAGS[@]}"
+          git push --force origin "${TAGS[@]}"
           
           echo "Tags created/updated successfully!"
 
