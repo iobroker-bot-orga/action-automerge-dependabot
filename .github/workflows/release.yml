@@ -44,12 +44,47 @@ jobs:
           fi
           echo "Tag v$VERSION does not exist, proceeding with release"
 
-      - name: Create and push tag
+      - name: Create and push tags
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git tag -a "v$VERSION" -m "Release v$VERSION"
-          git push origin "v$VERSION"
+          
+          # Parse version components
+          MAJOR=$(echo "$VERSION" | cut -d. -f1)
+          MINOR=$(echo "$VERSION" | cut -d. -f1-2)
+          PATCH="$VERSION"
+          
+          # Create array of tags to manage
+          TAGS=("v$PATCH" "v$MINOR" "v$MAJOR")
+          
+          echo "Creating/updating tags for version $VERSION:"
+          echo "  - v$PATCH (full version)"
+          echo "  - v$MINOR (major.minor)"
+          echo "  - v$MAJOR (major only)"
+          
+          # Create/update each tag
+          for tag in "${TAGS[@]}"; do
+            # Check if tag exists locally and delete it
+            if git rev-parse "$tag" >/dev/null 2>&1; then
+              echo "Deleting existing local tag: $tag"
+              git tag -d "$tag"
+            fi
+            
+            # Check if tag exists remotely and delete it
+            if git ls-remote --tags origin | grep -q "refs/tags/$tag$"; then
+              echo "Deleting existing remote tag: $tag"
+              git push --delete origin "$tag" || true
+            fi
+            
+            # Create new tag
+            echo "Creating tag: $tag"
+            git tag -a "$tag" -m "Release v$VERSION"
+          done
+          
+          # Push all tags
+          echo "Pushing tags to remote..."
+          git push origin --tags
+          echo "Tags created/updated successfully!"
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
