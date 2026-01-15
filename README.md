@@ -147,6 +147,8 @@ If no configuration file is provided, the following default rules apply:
 3. **Read Configuration**: Loads your auto-merge rules from the config file
 4. **Evaluate Rules**: Checks if the PR matches any of your rules
 5. **Wait for Checks** (optional): Waits for other CI checks to complete
+   - Workflows with `success`, `skipped`, or `neutral` conclusions are treated as successful
+   - The final result of all checked workflows is logged for transparency
 6. **Merge**: Automatically merges the PR if all conditions are met
 
 ## Security Considerations
