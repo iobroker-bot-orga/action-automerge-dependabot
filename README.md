@@ -34,7 +34,7 @@ jobs:
       
     steps:
       - name: Auto-merge Dependabot PRs
-        uses: iobroker-bot-orga/action-automerge-dependabot@v1
+        uses: iobroker-bot-orga/action-automerge-dependabot@main
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
 ```
@@ -44,7 +44,7 @@ jobs:
 ```yaml
 steps:
   - name: Auto-merge Dependabot PRs
-    uses: iobroker-bot-orga/action-automerge-dependabot@v1
+    uses: iobroker-bot-orga/action-automerge-dependabot@main
     with:
       github-token: ${{ secrets.GITHUB_TOKEN }}
       config-file-path: '.github/auto-merge.yml'
@@ -156,6 +156,15 @@ If no configuration file is provided, the following default rules apply:
 ## Example Repository Setup
 
 See the [example workflow](.github/workflows/auto-merge-example.yml) and [example configuration](.github/auto-merge.example.yml) files in this repository.
+
+## Versioning
+
+The examples in this README use `@main` to always get the latest version. For production use, you may want to:
+- Use `@main` for the latest features and fixes
+- Use a specific version tag (e.g., `@v1.0.0`) for stability
+- Use a major version tag (e.g., `@v1`) for automatic minor and patch updates
+
+Version tags will be created following [semantic versioning](https://semver.org/).
 
 ## License
 
