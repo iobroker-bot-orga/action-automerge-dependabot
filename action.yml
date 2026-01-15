@@ -1,0 +1,421 @@
+name: 'Auto-Merge Dependabot PRs'
+description: 'Automatically merge Dependabot PRs based on configuration rules'
+author: 'ioBroker Bot Organization'
+
+branding:
+  icon: 'git-merge'
+  color: 'green'
+
+inputs:
+  github-token:
+    description: 'GitHub token with permissions to merge PRs'
+    required: true
+  
+  config-file-path:
+    description: 'Path to the auto-merge configuration file'
+    required: false
+    default: '.github/auto-merge.yml'
+  
+  merge-method:
+    description: 'Merge method to use (merge, squash, or rebase)'
+    required: false
+    default: 'squash'
+  
+  wait-for-checks:
+    description: 'Wait for other checks to complete before merging'
+    required: false
+    default: 'true'
+  
+  max-wait-time:
+    description: 'Maximum time to wait for checks in seconds'
+    required: false
+    default: '3600'
+
+outputs:
+  should-merge:
+    description: 'Whether the PR should be merged based on configuration'
+    value: ${{ steps.should-merge.outputs.should_merge }}
+  
+  match-reason:
+    description: 'Reason for the merge decision'
+    value: ${{ steps.should-merge.outputs.match_reason }}
+  
+  checks-passed:
+    description: 'Whether all CI checks passed'
+    value: ${{ steps.wait-for-checks.outputs.checks_passed || steps.skip-checks.outputs.checks_passed }}
+
+runs:
+  using: 'composite'
+  steps:
+    - name: Fetch Dependabot metadata
+      id: dependabot-metadata
+      uses: dependabot/fetch-metadata@v2
+      with:
+        github-token: ${{ inputs.github-token }}
+    
+    - name: Extract metadata for decision making
+      id: metadata
+      shell: bash
+      run: |
+        # Extract update type from dependabot metadata
+        # Format: "version-update:semver-patch", "version-update:semver-minor", "version-update:semver-major"
+        UPDATE_TYPE_RAW="${{ steps.dependabot-metadata.outputs.update-type }}"
+        
+        if [[ "$UPDATE_TYPE_RAW" == *"semver-patch"* ]]; then
+          UPDATE_TYPE="patch"
+        elif [[ "$UPDATE_TYPE_RAW" == *"semver-minor"* ]]; then
+          UPDATE_TYPE="minor"
+        elif [[ "$UPDATE_TYPE_RAW" == *"semver-major"* ]]; then
+          UPDATE_TYPE="major"
+        else
+          UPDATE_TYPE="unknown"
+        fi
+        
+        echo "update_type=$UPDATE_TYPE" >> $GITHUB_OUTPUT
+        echo "Update type: $UPDATE_TYPE"
+        
+        # Extract dependency type
+        # Format: "direct:production" or "direct:development"
+        DEPENDENCY_TYPE_RAW="${{ steps.dependabot-metadata.outputs.dependency-type }}"
+        
+        if [[ "$DEPENDENCY_TYPE_RAW" == *"production"* ]]; then
+          DEPENDENCY_TYPE="production"
+        elif [[ "$DEPENDENCY_TYPE_RAW" == *"development"* ]]; then
+          DEPENDENCY_TYPE="development"
+        else
+          DEPENDENCY_TYPE="unknown"
+        fi
+        
+        echo "dependency_type=$DEPENDENCY_TYPE" >> $GITHUB_OUTPUT
+        echo "Dependency type: $DEPENDENCY_TYPE"
+        
+        # Log package information
+        echo "Package name(s): ${{ steps.dependabot-metadata.outputs.dependency-names }}"
+        echo "Previous version: ${{ steps.dependabot-metadata.outputs.previous-version }}"
+        echo "New version: ${{ steps.dependabot-metadata.outputs.new-version }}"
+    
+    - name: Checkout repository
+      uses: actions/checkout@v4
+      with:
+        ref: ${{ github.event.pull_request.base.ref }}
+    
+    - name: Read and parse auto-merge configuration
+      id: read-config
+      shell: bash
+      run: |
+        CONFIG_FILE="${{ inputs.config-file-path }}"
+        
+        if [ ! -f "$CONFIG_FILE" ]; then
+          echo "Configuration file $CONFIG_FILE not found"
+          echo "Using default rules:"
+          echo "- Patch updates: always merge"
+          echo "- Minor updates: only for devDependencies"
+          echo "- Major updates: never merge"
+          echo "config_exists=false" >> $GITHUB_OUTPUT
+          echo "config_json=[]" >> $GITHUB_OUTPUT
+        else
+          echo "Configuration file found"
+          echo "config_exists=true" >> $GITHUB_OUTPUT
+          cat "$CONFIG_FILE"
+          
+          # Convert YAML to JSON for easier parsing (compact, single line)
+          # Note: python3 and PyYAML are available by default on ubuntu-latest runners
+          if ! CONFIG_JSON=$(python3 -c "import yaml, json, sys; print(json.dumps(yaml.safe_load(open(sys.argv[1]))))" "$CONFIG_FILE" 2>&1); then
+            echo "Error: Failed to parse YAML configuration file"
+            echo "Error details: $CONFIG_JSON"
+            echo "config_exists=false" >> $GITHUB_OUTPUT
+            echo "config_json=[]" >> $GITHUB_OUTPUT
+            exit 1
+          fi
+          echo "config_json=$CONFIG_JSON" >> $GITHUB_OUTPUT
+        fi
+    
+    - name: Decide if should auto-merge
+      id: should-merge
+      env:
+        CONFIG_JSON: ${{ steps.read-config.outputs.config_json }}
+      uses: actions/github-script@v7
+      with:
+        github-token: ${{ inputs.github-token }}
+        script: |
+          const updateType = '${{ steps.metadata.outputs.update_type }}';
+          const dependencyType = '${{ steps.metadata.outputs.dependency_type }}';
+          const configExists = '${{ steps.read-config.outputs.config_exists }}' === 'true';
+          
+          console.log('='.repeat(80));
+          console.log('AUTOMERGE EVALUATION');
+          console.log('='.repeat(80));
+          console.log(`PR: #${{ github.event.pull_request.number }}`);
+          console.log(`Dependency: ${{ steps.dependabot-metadata.outputs.dependency-names }}`);
+          console.log(`Version change: ${{ steps.dependabot-metadata.outputs.previous-version }} → ${{ steps.dependabot-metadata.outputs.new-version }}`);
+          console.log(`Update type: ${updateType}`);
+          console.log(`Dependency type: ${dependencyType}`);
+          console.log(`Config file exists: ${configExists}`);
+          console.log('='.repeat(80));
+          
+          let shouldMerge = false;
+          let matchReason = '';
+          
+          if (configExists) {
+            // Read and parse configuration from JSON passed via environment variable
+            try {
+              const configJson = process.env.CONFIG_JSON;
+              const config = JSON.parse(configJson);
+              
+              console.log('Configuration rules:', JSON.stringify(config, null, 2));
+              console.log('-'.repeat(80));
+              
+              // Check each match rule
+              let ruleIndex = 0;
+              for (const rule of config) {
+                ruleIndex++;
+                const match = rule.match;
+                if (!match) {
+                  console.log(`Rule ${ruleIndex}: Skipped (no match criteria)`);
+                  continue;
+                }
+                
+                console.log(`Rule ${ruleIndex}: Checking...`);
+                console.log(`  Expected dependency_type: ${match.dependency_type || 'any'}`);
+                console.log(`  Expected update_type: ${match.update_type || 'any'}`);
+                
+                // Check dependency type
+                let depTypeMatches = !match.dependency_type || match.dependency_type === dependencyType;
+                if (match.dependency_type && !depTypeMatches) {
+                  console.log(`  ❌ Dependency type mismatch: expected ${match.dependency_type}, got ${dependencyType}`);
+                } else if (match.dependency_type) {
+                  console.log(`  ✅ Dependency type matches: ${dependencyType}`);
+                }
+                
+                // Check update type (only semver: types are supported)
+                let updateTypeMatches = false;
+                if (match.update_type) {
+                  const matchType = match.update_type;
+                  if (matchType.startsWith('semver:')) {
+                    const semverType = matchType.replace('semver:', '');
+                    updateTypeMatches = (updateType === semverType);
+                    if (updateTypeMatches) {
+                      console.log(`  ✅ Update type matches: ${updateType}`);
+                    } else {
+                      console.log(`  ❌ Update type mismatch: expected ${semverType}, got ${updateType}`);
+                    }
+                  } else {
+                    console.log(`  ⚠️  Unsupported update_type format: ${matchType} (only 'semver:' prefixes are supported)`);
+                  }
+                }
+                
+                if (depTypeMatches && updateTypeMatches) {
+                  shouldMerge = true;
+                  matchReason = `Matched rule ${ruleIndex}: dependency_type=${match.dependency_type}, update_type=${match.update_type}`;
+                  console.log(`  ✅ RULE MATCHED - Will automerge`);
+                  break;
+                } else {
+                  console.log(`  ⏭️  Rule did not match`);
+                }
+              }
+              
+              if (!shouldMerge) {
+                matchReason = 'No configuration rule matched this update';
+              }
+            } catch (err) {
+              console.error('Error reading config:', err);
+              matchReason = `Configuration error: ${err.message}`;
+            }
+          } else {
+            // Default rules (no config file)
+            console.log('Using default rules (no config file found)');
+            console.log('-'.repeat(80));
+            
+            if (updateType === 'patch') {
+              // Always merge patch updates
+              shouldMerge = true;
+              matchReason = 'Default rule: Patch updates are always merged';
+              console.log('✅ ' + matchReason);
+            } else if (updateType === 'minor') {
+              // Merge minor updates for devDependencies only
+              if (dependencyType === 'development') {
+                shouldMerge = true;
+                matchReason = 'Default rule: Minor updates for devDependencies are merged';
+                console.log('✅ ' + matchReason);
+              } else {
+                matchReason = 'Default rule: Minor updates for production dependencies are not merged';
+                console.log('❌ ' + matchReason);
+              }
+            } else if (updateType === 'major') {
+              // Never merge major updates
+              matchReason = 'Default rule: Major updates are never merged';
+              console.log('❌ ' + matchReason);
+            } else {
+              matchReason = `Unknown update type: ${updateType}`;
+              console.log('❌ ' + matchReason);
+            }
+          }
+          
+          console.log('='.repeat(80));
+          console.log(`DECISION: ${shouldMerge ? '✅ WILL AUTOMERGE' : '❌ WILL NOT AUTOMERGE'}`);
+          console.log(`REASON: ${matchReason}`);
+          console.log('='.repeat(80));
+          
+          core.setOutput('should_merge', shouldMerge.toString());
+          core.setOutput('match_reason', matchReason);
+          
+          return shouldMerge;
+    
+    - name: Wait for other workflows
+      if: |
+        steps.should-merge.outputs.should_merge == 'true' &&
+        inputs.wait-for-checks == 'true'
+      id: wait-for-checks
+      uses: actions/github-script@v7
+      with:
+        github-token: ${{ inputs.github-token }}
+        script: |
+          const prNumber = ${{ github.event.pull_request.number }};
+          const headSha = '${{ github.event.pull_request.head.sha }}';
+          
+          console.log('='.repeat(80));
+          console.log('WAITING FOR CI CHECKS');
+          console.log('='.repeat(80));
+          console.log(`PR: #${prNumber}`);
+          console.log(`Commit SHA: ${headSha}`);
+          console.log('='.repeat(80));
+          
+          // Wait for checks to complete
+          const maxWaitTime = ${{ inputs.max-wait-time }} * 1000; // Convert to milliseconds
+          const pollInterval = 30 * 1000; // 30 seconds
+          const startTime = Date.now();
+          
+          while (Date.now() - startTime < maxWaitTime) {
+            // Get check runs for the commit
+            const { data: checkRuns } = await github.rest.checks.listForRef({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              ref: headSha,
+              per_page: 100
+            });
+            
+            // Filter out this workflow
+            const otherChecks = checkRuns.check_runs.filter(check => 
+              check.name !== 'auto-merge' && 
+              check.name !== context.job
+            );
+            
+            console.log(`\nFound ${otherChecks.length} other check(s)`);
+            
+            if (otherChecks.length === 0) {
+              console.log('No other checks found, proceeding with merge');
+              console.log('='.repeat(80));
+              core.setOutput('checks_passed', 'true');
+              return true;
+            }
+            
+            // Check status of all checks
+            const pending = otherChecks.filter(check => 
+              check.status !== 'completed'
+            );
+            
+            const failed = otherChecks.filter(check => 
+              check.status === 'completed' && check.conclusion !== 'success' && check.conclusion !== 'skipped'
+            );
+            
+            const successful = otherChecks.filter(check => 
+              check.status === 'completed' && (check.conclusion === 'success' || check.conclusion === 'skipped')
+            );
+            
+            console.log(`Status: ${successful.length} successful, ${pending.length} pending, ${failed.length} failed`);
+            
+            if (failed.length > 0) {
+              console.log('\n' + '='.repeat(80));
+              console.log('❌ CHECK FAILURE DETECTED');
+              console.log('='.repeat(80));
+              console.log('The following checks failed:');
+              failed.forEach(check => {
+                console.log(`  ❌ ${check.name}`);
+                console.log(`     Status: ${check.status}`);
+                console.log(`     Conclusion: ${check.conclusion}`);
+                console.log(`     URL: ${check.html_url}`);
+              });
+              console.log('='.repeat(80));
+              console.log('DECISION: Cannot automerge due to failed checks');
+              console.log('='.repeat(80));
+              core.setOutput('checks_passed', 'false');
+              core.setFailed(`${failed.length} check(s) failed - cannot automerge`);
+              return false;
+            }
+            
+            if (pending.length === 0) {
+              console.log('\n' + '='.repeat(80));
+              console.log('✅ ALL CHECKS PASSED');
+              console.log('='.repeat(80));
+              successful.forEach(check => {
+                console.log(`  ✅ ${check.name}: ${check.conclusion}`);
+              });
+              console.log('='.repeat(80));
+              console.log('DECISION: Proceeding with automerge');
+              console.log('='.repeat(80));
+              core.setOutput('checks_passed', 'true');
+              return true;
+            }
+            
+            // Wait before checking again
+            console.log(`\nWaiting for ${pending.length} check(s) to complete...`);
+            pending.forEach(check => {
+              console.log(`  ⏳ ${check.name}: ${check.status}`);
+            });
+            
+            await new Promise(resolve => setTimeout(resolve, pollInterval));
+          }
+          
+          // Timeout
+          console.log('\n' + '='.repeat(80));
+          console.log('⏱️  TIMEOUT');
+          console.log('='.repeat(80));
+          console.log('Checks did not complete within the timeout period');
+          console.log('='.repeat(80));
+          core.setFailed('Timeout waiting for checks to complete');
+          core.setOutput('checks_passed', 'false');
+          return false;
+    
+    - name: Set checks passed when not waiting
+      if: |
+        steps.should-merge.outputs.should_merge == 'true' &&
+        inputs.wait-for-checks != 'true'
+      id: skip-checks
+      shell: bash
+      run: |
+        echo "checks_passed=true" >> $GITHUB_OUTPUT
+    
+    - name: Merge PR
+      if: |
+        steps.should-merge.outputs.should_merge == 'true' &&
+        (steps.wait-for-checks.outputs.checks_passed == 'true' || steps.skip-checks.outputs.checks_passed == 'true')
+      uses: actions/github-script@v7
+      with:
+        github-token: ${{ inputs.github-token }}
+        script: |
+          const prNumber = ${{ github.event.pull_request.number }};
+          const mergeMethod = '${{ inputs.merge-method }}';
+          
+          console.log('='.repeat(80));
+          console.log('MERGING PR');
+          console.log('='.repeat(80));
+          console.log(`PR: #${prNumber}`);
+          console.log(`Merge method: ${mergeMethod}`);
+          console.log('='.repeat(80));
+          
+          try {
+            await github.rest.pulls.merge({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              pull_number: prNumber,
+              merge_method: mergeMethod,
+            });
+            
+            console.log(`✅ Successfully merged PR #${prNumber}`);
+            console.log('='.repeat(80));
+          } catch (error) {
+            console.log(`❌ Failed to merge PR #${prNumber}`);
+            console.log(`Error: ${error.message}`);
+            console.log('='.repeat(80));
+            core.setFailed(error.message);
+          }
