@@ -11,6 +11,8 @@ on:
 jobs:
   validate-and-release:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
     env:
       VERSION: ${{ github.event.inputs.version }}
 
