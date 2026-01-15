@@ -64,26 +64,32 @@ jobs:
           
           # Create/update each tag
           for tag in "${TAGS[@]}"; do
-            # Check if tag exists locally and delete it
-            if git rev-parse "$tag" >/dev/null 2>&1; then
-              echo "Deleting existing local tag: $tag"
-              git tag -d "$tag"
+            # For the full version tag, just create it (we already verified it doesn't exist)
+            if [ "$tag" = "v$PATCH" ]; then
+              echo "Creating tag: $tag"
+              git tag -a "$tag" -m "Release v$VERSION"
+              git push origin "$tag"
+            else
+              # For major and minor tags, delete if exists and recreate
+              # Check if tag exists locally and delete it
+              if git rev-parse "$tag" >/dev/null 2>&1; then
+                echo "Deleting existing local tag: $tag"
+                git tag -d "$tag"
+              fi
+              
+              # Check if tag exists remotely and delete it
+              if git ls-remote --tags origin | grep -q "refs/tags/$tag$"; then
+                echo "Deleting existing remote tag: $tag"
+                git push --delete origin "$tag" || true
+              fi
+              
+              # Create new tag
+              echo "Creating/updating tag: $tag"
+              git tag -a "$tag" -m "Release v$VERSION"
+              git push origin "$tag"
             fi
-            
-            # Check if tag exists remotely and delete it
-            if git ls-remote --tags origin | grep -q "refs/tags/$tag$"; then
-              echo "Deleting existing remote tag: $tag"
-              git push --delete origin "$tag" || true
-            fi
-            
-            # Create new tag
-            echo "Creating tag: $tag"
-            git tag -a "$tag" -m "Release v$VERSION"
           done
           
-          # Push all tags
-          echo "Pushing tags to remote..."
-          git push origin --tags
           echo "Tags created/updated successfully!"
 
       - name: Create GitHub Release
