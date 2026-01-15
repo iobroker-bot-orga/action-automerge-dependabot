@@ -10,7 +10,6 @@ inputs:
   github-token:
     description: 'GitHub token with permissions to merge PRs'
     required: true
-    default: ${{ github.token }}
   
   config-file-path:
     description: 'Path to the auto-merge configuration file'
@@ -121,7 +120,7 @@ runs:
           
           # Convert YAML to JSON for easier parsing (compact, single line)
           # Note: python3 and PyYAML are available by default on ubuntu-latest runners
-          if ! CONFIG_JSON=$(python3 -c "import yaml, json, sys; print(json.dumps(yaml.safe_load(open('$CONFIG_FILE'))))" 2>&1); then
+          if ! CONFIG_JSON=$(python3 -c "import yaml, json, sys; print(json.dumps(yaml.safe_load(open(sys.argv[1]))))" "$CONFIG_FILE" 2>&1); then
             echo "Error: Failed to parse YAML configuration file"
             echo "Error details: $CONFIG_JSON"
             echo "config_exists=false" >> $GITHUB_OUTPUT
@@ -181,13 +180,9 @@ runs:
                 console.log(`  Expected update_type: ${match.update_type || 'any'}`);
                 
                 // Check dependency type
-                let depTypeMatches = true;
-                if (match.dependency_type === 'production' && dependencyType !== 'production') {
-                  depTypeMatches = false;
-                  console.log(`  ❌ Dependency type mismatch: expected production, got ${dependencyType}`);
-                } else if (match.dependency_type === 'development' && dependencyType !== 'development') {
-                  depTypeMatches = false;
-                  console.log(`  ❌ Dependency type mismatch: expected development, got ${dependencyType}`);
+                let depTypeMatches = !match.dependency_type || match.dependency_type === dependencyType;
+                if (match.dependency_type && !depTypeMatches) {
+                  console.log(`  ❌ Dependency type mismatch: expected ${match.dependency_type}, got ${dependencyType}`);
                 } else if (match.dependency_type) {
                   console.log(`  ✅ Dependency type matches: ${dependencyType}`);
                 }
@@ -204,8 +199,9 @@ runs:
                     } else {
                       console.log(`  ❌ Update type mismatch: expected ${semverType}, got ${updateType}`);
                     }
+                  } else {
+                    console.log(`  ⚠️  Unsupported update_type format: ${matchType} (only 'semver:' prefixes are supported)`);
                   }
-                  // Note: Only semver: prefixes are supported (e.g., semver:patch, semver:minor, semver:major)
                 }
                 
                 if (depTypeMatches && updateTypeMatches) {
