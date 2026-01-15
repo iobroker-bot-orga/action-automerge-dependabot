@@ -446,6 +446,24 @@ runs:
           console.log(`Merge method: ${mergeMethod}`);
           console.log('='.repeat(80));
           
+          // Fetch current PR state to check if rebase is in progress
+          const { data: pr } = await github.rest.pulls.get({
+            owner: context.repo.owner,
+            repo: context.repo.repo,
+            pull_number: prNumber,
+          });
+          
+          console.log(`PR mergeable_state: ${pr.mergeable_state}`);
+          console.log(`PR mergeable: ${pr.mergeable}`);
+          
+          // Skip merging if mergeable_state is 'unknown' (rebase in progress)
+          if (pr.mergeable_state === 'unknown') {
+            console.log('⏸️  Skipping merge: PR rebase or mergeability computation is in progress');
+            console.log('The action will need to be triggered again once the rebase completes');
+            console.log('='.repeat(80));
+            return;
+          }
+          
           try {
             await github.rest.pulls.merge({
               owner: context.repo.owner,
