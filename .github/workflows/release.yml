@@ -65,13 +65,15 @@ jobs:
           # Fetch remote tags once for efficiency
           REMOTE_TAGS=$(git ls-remote --tags origin)
           
-          # Create/update each tag
+          # Track tags to delete remotely
+          TAGS_TO_DELETE=()
+          
+          # Create/update each tag locally
           for tag in "${TAGS[@]}"; do
             # For the full version tag, just create it (we already verified it doesn't exist)
             if [ "$tag" = "v$PATCH" ]; then
               echo "Creating tag: $tag"
               git tag -a "$tag" -m "Release v$VERSION"
-              git push origin "$tag"
             else
               # For major and minor tags, delete if exists and recreate
               # Check if tag exists locally and delete it
@@ -80,18 +82,29 @@ jobs:
                 git tag -d "$tag"
               fi
               
-              # Check if tag exists remotely and delete it
+              # Check if tag exists remotely and mark for deletion
               if echo "$REMOTE_TAGS" | grep -q "refs/tags/$tag$"; then
-                echo "Deleting existing remote tag: $tag"
-                git push --delete origin "$tag"
+                echo "Marking remote tag for deletion: $tag"
+                TAGS_TO_DELETE+=("$tag")
               fi
               
               # Create new tag
               echo "Creating/updating tag: $tag"
               git tag -a "$tag" -m "Release v$VERSION"
-              git push origin "$tag"
             fi
           done
+          
+          # Delete remote tags in batch if any need to be deleted
+          if [ ${#TAGS_TO_DELETE[@]} -gt 0 ]; then
+            echo "Deleting remote tags: ${TAGS_TO_DELETE[*]}"
+            for tag in "${TAGS_TO_DELETE[@]}"; do
+              git push --delete origin "$tag"
+            done
+          fi
+          
+          # Push all newly created tags in batch
+          echo "Pushing tags to remote: ${TAGS[*]}"
+          git push origin "${TAGS[@]}"
           
           echo "Tags created/updated successfully!"
 
