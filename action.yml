@@ -593,10 +593,10 @@ runs:
           
           if (!shouldMerge) {
             reason = `The PR does not match any automerge rules.\n\n**Details:** ${matchReason}`;
-          } else if ((checksPassedWait && checksPassedWait === 'false') || (checksPassedSkip && checksPassedSkip === 'false')) {
-            reason = `CI checks failed or timed out.`;
           } else {
-            reason = `Unknown reason - checks may not have completed.`;
+            // If shouldMerge is true but we're in this step, checks must have failed
+            // (the step condition ensures we only run when checks didn't pass)
+            reason = `CI checks failed or timed out.`;
           }
           
           const comment = `❌ **Not Automerged**\n\n${reason}`;
