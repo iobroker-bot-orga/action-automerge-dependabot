@@ -575,6 +575,7 @@ runs:
           }
     
     - name: Comment on PR when not automerging
+      # This step runs when: PR doesn't match automerge rules OR CI checks failed/timed out
       if: |
         steps.should-merge.outputs.should_merge != 'true' ||
         (steps.wait-for-checks.outputs.checks_passed != 'true' && steps.skip-checks.outputs.checks_passed != 'true')
@@ -593,9 +594,9 @@ runs:
           if (!shouldMerge) {
             reason = `The PR does not match any automerge rules.\n\n**Details:** ${matchReason}`;
           } else if (checksPassedWait === 'false' || checksPassedSkip === 'false') {
-            reason = 'CI checks failed or timed out.';
+            reason = `CI checks failed or timed out.`;
           } else {
-            reason = 'Unknown reason - checks may not have completed.';
+            reason = `Unknown reason - checks may not have completed.`;
           }
           
           const comment = `❌ **Not Automerged**\n\n${reason}`;
