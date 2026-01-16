@@ -550,6 +550,8 @@ runs:
           console.log('='.repeat(80));
           
           // Verify that PR is mergeable and not in dirty or unknown state
+          // Note: This is a safety check. While 'unknown' is handled by the timeout logic above,
+          // this ensures we catch any edge cases where the state might still be unknown or dirty
           if (pr.mergeable !== true || pr.mergeable_state === 'dirty' || pr.mergeable_state === 'unknown') {
             console.log('\n❌ PR is not in a mergeable state');
             console.log(`   mergeable: ${pr.mergeable}`);
