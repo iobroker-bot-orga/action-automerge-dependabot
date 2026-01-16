@@ -593,7 +593,7 @@ runs:
           
           if (!shouldMerge) {
             reason = `The PR does not match any automerge rules.\n\n**Details:** ${matchReason}`;
-          } else if (checksPassedWait === 'false' || checksPassedSkip === 'false') {
+          } else if ((checksPassedWait && checksPassedWait === 'false') || (checksPassedSkip && checksPassedSkip === 'false')) {
             reason = `CI checks failed or timed out.`;
           } else {
             reason = `Unknown reason - checks may not have completed.`;
