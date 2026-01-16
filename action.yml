@@ -514,17 +514,27 @@ runs:
             // If still unknown after 60 minutes, request recreation
             if (!waitSuccess) {
               console.log('\n⏱️  Timeout: PR mergeable_state still unknown after 60 minutes');
-              console.log('Adding comment to request Dependabot recreation');
+              console.log('Adding status comment and Dependabot recreation command');
               
-              const comment = `⏱️ **Automerge Timeout**\n\nThe PR mergeable_state remained unknown after 60 minutes of waiting.\n\n@dependabot recreate`;
+              // Post status information as first comment
+              const statusComment = `⏱️ **Automerge Timeout**\n\nThe PR mergeable_state remained unknown after 60 minutes of waiting.`;
               await github.rest.issues.createComment({
                 owner: context.repo.owner,
                 repo: context.repo.repo,
                 issue_number: prNumber,
-                body: comment,
+                body: statusComment,
               });
               
-              console.log('✅ Successfully added recreation comment');
+              // Post @dependabot recreate as separate comment
+              const recreateComment = `@dependabot recreate`;
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: prNumber,
+                body: recreateComment,
+              });
+              
+              console.log('✅ Successfully added status and recreation comments');
               console.log('='.repeat(80));
               return;
             }
