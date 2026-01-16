@@ -536,6 +536,7 @@ runs:
               
               console.log('✅ Successfully added status and recreation comments');
               console.log('='.repeat(80));
+              core.setFailed('PR mergeable_state remained unknown after 60 minutes');
               return;
             }
             
@@ -547,6 +548,37 @@ runs:
           console.log(`   mergeable_state: ${pr.mergeable_state}`);
           console.log(`   mergeable: ${pr.mergeable}`);
           console.log('='.repeat(80));
+          
+          // Verify that PR is mergeable and not in dirty or unknown state
+          if (pr.mergeable !== true || pr.mergeable_state === 'dirty' || pr.mergeable_state === 'unknown') {
+            console.log('\n❌ PR is not in a mergeable state');
+            console.log(`   mergeable: ${pr.mergeable}`);
+            console.log(`   mergeable_state: ${pr.mergeable_state}`);
+            console.log('Adding status comment and Dependabot recreation command');
+            
+            // Post status information as first comment
+            const statusComment = `⚠️ **Automerge Skipped**\n\nMerging is skipped because the PR is in a dirty or unknown state.\n\n**Status:** mergeable=${pr.mergeable}, mergeable_state=${pr.mergeable_state}`;
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: prNumber,
+              body: statusComment,
+            });
+            
+            // Post @dependabot recreate as separate comment
+            const recreateComment = `@dependabot recreate`;
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: prNumber,
+              body: recreateComment,
+            });
+            
+            console.log('✅ Successfully added status and recreation comments');
+            console.log('='.repeat(80));
+            core.setFailed(`PR is not mergeable: mergeable=${pr.mergeable}, mergeable_state=${pr.mergeable_state}`);
+            return;
+          }
           
           try {
             await github.rest.pulls.merge({
