@@ -102,11 +102,11 @@ runs:
           echo "Changed files:"
           echo "$CHANGED_FILES"
           
-          # Count the number of changed files
-          FILE_COUNT=$(echo "$CHANGED_FILES" | wc -l)
+          # Trim whitespace and check if only package-lock.json is changed
+          CHANGED_FILES_TRIMMED=$(echo "$CHANGED_FILES" | tr -d '[:space:]')
           
-          # Check if only one file is changed and it's package-lock.json
-          if [[ $FILE_COUNT -eq 1 && "$CHANGED_FILES" == "package-lock.json" ]]; then
+          # Check if we have exactly one file and it's package-lock.json
+          if [[ -n "$CHANGED_FILES_TRIMMED" && "$CHANGED_FILES_TRIMMED" == "package-lock.json" ]]; then
             echo "Only package-lock.json is changed, setting dependency_type to 'package-lock'"
             DEPENDENCY_TYPE="package-lock"
           fi
