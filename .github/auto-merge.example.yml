@@ -11,6 +11,10 @@
     # Merge patch and minor updates for development dependencies
     dependency_type: development
     update_type: "semver:minor"
+- match:
+    # Merge patch and minor updates for package-lock.json only changes
+    dependency_type: package-lock
+    update_type: "semver:minor"
 
 # The syntax is based on the legacy dependabot v1 automerged_updates syntax, see:
 # https://dependabot.com/docs/config-file/#automerged_updates
@@ -35,3 +39,6 @@
 # - match:
 #     dependency_type: development
 #     update_type: "semver:major"
+
+# Note: If you don't specify a rule for package-lock, minor and patch updates
+# for package-lock.json only changes are merged by default.
