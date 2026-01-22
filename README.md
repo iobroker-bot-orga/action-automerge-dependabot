@@ -94,7 +94,7 @@ Create a file at `.github/auto-merge.yml` in your repository to define merge rul
 - `dependency_type`: `production`, `development`, or `package-lock`
   - `production` - Direct production dependencies
   - `development` - Development dependencies
-  - `package-lock` - Changes only to package-lock.json file
+  - `package-lock` - Changes only to a package-lock.json file (in any directory)
 - `update_type`: `semver:patch`, `semver:minor`, or `semver:major`
   - **Hierarchical matching**: Higher version changes include all lower changes
     - `semver:patch` - Only patch updates (e.g., 1.0.0 → 1.0.1)
@@ -144,7 +144,7 @@ Allow minor and patch updates for package-lock only changes:
 
 #### Package-Lock.json Only Changes
 
-When Dependabot creates a PR that only changes `package-lock.json` (no other files modified), the action automatically detects this and treats the dependency type as `package-lock`. This typically happens when a transitive dependency is updated.
+When Dependabot creates a PR that only changes a `package-lock.json` file (no other files modified), the action automatically detects this and treats the dependency type as `package-lock`. This works for `package-lock.json` in any directory (e.g., `./package-lock.json`, `src-admin/package-lock.json`, etc.). This typically happens when a transitive dependency is updated.
 
 **Behavior:**
 - If a config file exists with a rule for `dependency_type: package-lock`, that rule is evaluated
