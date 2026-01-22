@@ -304,6 +304,11 @@ runs:
           console.log(`Commit SHA: ${headSha}`);
           console.log('='.repeat(80));
           
+          // Add a 10-second delay to avoid race conditions with checks starting
+          console.log('Waiting 10 seconds to avoid race conditions...');
+          await new Promise(resolve => setTimeout(resolve, 10000));
+          console.log('Initial delay complete, starting to check for workflows');
+          
           // Wait for checks to complete
           const maxWaitTime = ${{ inputs.max-wait-time }} * 1000; // Convert to milliseconds
           const pollInterval = 45 * 1000; // 45 seconds
@@ -447,6 +452,48 @@ runs:
           console.log(`Merge method: ${mergeMethod}`);
           console.log('='.repeat(80));
           
+          // Helper function to fetch PR metadata and files for comments
+          const fetchPRMetadata = async () => {
+            // Fetch list of files modified by the PR
+            const { data: files } = await github.rest.pulls.listFiles({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              pull_number: prNumber,
+            });
+            
+            const filesList = files.length > 0 ? files.map(f => `- ${f.filename}`).join('\n') : '- (no files modified)';
+            
+            // Prepare dependabot metadata
+            const dependencyNames = '${{ steps.dependabot-metadata.outputs.dependency-names }}';
+            const previousVersion = '${{ steps.dependabot-metadata.outputs.previous-version }}';
+            const newVersion = '${{ steps.dependabot-metadata.outputs.new-version }}';
+            const updateType = '${{ steps.metadata.outputs.update_type }}';
+            const dependencyType = '${{ steps.metadata.outputs.dependency_type }}';
+            
+            return {
+              filesList,
+              dependencyNames,
+              previousVersion,
+              newVersion,
+              updateType,
+              dependencyType
+            };
+          };
+          
+          // Helper function to format metadata section for comments
+          const formatMetadataSection = (metadata) => {
+            return [
+              '\n\n**Dependabot Information:**\n',
+              `- **Package name(s):** ${metadata.dependencyNames}\n`,
+              `- **Update type:** ${metadata.updateType}\n`,
+              `- **Dependency type:** ${metadata.dependencyType}\n`,
+              `- **Previous version:** ${metadata.previousVersion}\n`,
+              `- **New version:** ${metadata.newVersion}\n\n`,
+              '**Modified Files:**\n',
+              `${metadata.filesList}`
+            ].join('');
+          };
+          
           // Fetch current PR state to check if rebase is in progress
           let pr = await github.rest.pulls.get({
             owner: context.repo.owner,
@@ -496,7 +543,8 @@ runs:
               // Check if PR is no longer mergeable
               if (pr.mergeable === false) {
                 console.log('❌ PR is no longer mergeable');
-                const comment = `❌ **Automerge Failed**\n\nThe PR became unmergeable during the waiting period.\n\n**Reason:** ${matchReason}\n**Status:** mergeable_state=${pr.mergeable_state}, mergeable=${pr.mergeable}`;
+                const metadata = await fetchPRMetadata();
+                const comment = `❌ **Automerge Failed**\n\nThe PR became unmergeable during the waiting period.\n\n**Reason:** ${matchReason}\n**Status:** mergeable_state=${pr.mergeable_state}, mergeable=${pr.mergeable}${formatMetadataSection(metadata)}`;
                 await github.rest.issues.createComment({
                   owner: context.repo.owner,
                   repo: context.repo.repo,
@@ -517,7 +565,8 @@ runs:
               console.log('Adding status comment and Dependabot recreation command');
               
               // Post status information as first comment
-              const statusComment = `⏱️ **Automerge Timeout**\n\nThe PR mergeable_state remained unknown after 60 minutes of waiting.`;
+              const metadata = await fetchPRMetadata();
+              const statusComment = `⏱️ **Automerge Timeout**\n\nThe PR mergeable_state remained unknown after 60 minutes of waiting.${formatMetadataSection(metadata)}`;
               await github.rest.issues.createComment({
                 owner: context.repo.owner,
                 repo: context.repo.repo,
@@ -559,7 +608,8 @@ runs:
             console.log('Adding status comment and Dependabot recreation command');
             
             // Post status information as first comment
-            const statusComment = `⚠️ **Automerge Skipped**\n\nMerging is skipped because the PR is in a dirty or unknown state.\n\n**Status:** mergeable=${pr.mergeable}, mergeable_state=${pr.mergeable_state}`;
+            const metadata = await fetchPRMetadata();
+            const statusComment = `⚠️ **Automerge Skipped**\n\nMerging is skipped because the PR is in a dirty or unknown state.\n\n**Status:** mergeable=${pr.mergeable}, mergeable_state=${pr.mergeable_state}${formatMetadataSection(metadata)}`;
             await github.rest.issues.createComment({
               owner: context.repo.owner,
               repo: context.repo.repo,
@@ -593,8 +643,17 @@ runs:
             console.log(`✅ Successfully merged PR #${prNumber}`);
             console.log('='.repeat(80));
             
-            // Add success comment to PR
-            const comment = `✅ **Automerged**\n\n**Reason:** ${matchReason}\n**Merge method:** ${mergeMethod}`;
+            // Fetch PR metadata and files
+            const metadata = await fetchPRMetadata();
+            
+            // Add success comment to PR with enhanced information
+            const comment = [
+              '✅ **Automerged**\n',
+              `**Reason:** ${matchReason}\n`,
+              `**Merge method:** ${mergeMethod}`,
+              formatMetadataSection(metadata)
+            ].join('');
+            
             await github.rest.issues.createComment({
               owner: context.repo.owner,
               repo: context.repo.repo,
@@ -607,7 +666,8 @@ runs:
             console.log('='.repeat(80));
             
             // Add failure comment to PR
-            const comment = `❌ **Automerge Failed**\n\n**Reason for attempting merge:** ${matchReason}\n**Error:** ${error.message}\n**Status:** mergeable_state=${pr.mergeable_state}, mergeable=${pr.mergeable}`;
+            const metadata = await fetchPRMetadata();
+            const comment = `❌ **Automerge Failed**\n\n**Reason for attempting merge:** ${matchReason}\n**Error:** ${error.message}\n**Status:** mergeable_state=${pr.mergeable_state}, mergeable=${pr.mergeable}${formatMetadataSection(metadata)}`;
             await github.rest.issues.createComment({
               owner: context.repo.owner,
               repo: context.repo.repo,
@@ -633,6 +693,33 @@ runs:
           const checksPassedWait = '${{ steps.wait-for-checks.outputs.checks_passed }}';
           const checksPassedSkip = '${{ steps.skip-checks.outputs.checks_passed }}';
           
+          // Fetch PR metadata and files
+          const { data: files } = await github.rest.pulls.listFiles({
+            owner: context.repo.owner,
+            repo: context.repo.repo,
+            pull_number: prNumber,
+          });
+          
+          const filesList = files.length > 0 ? files.map(f => `- ${f.filename}`).join('\n') : '- (no files modified)';
+          
+          // Prepare dependabot metadata
+          const dependencyNames = '${{ steps.dependabot-metadata.outputs.dependency-names }}';
+          const previousVersion = '${{ steps.dependabot-metadata.outputs.previous-version }}';
+          const newVersion = '${{ steps.dependabot-metadata.outputs.new-version }}';
+          const updateType = '${{ steps.metadata.outputs.update_type }}';
+          const dependencyType = '${{ steps.metadata.outputs.dependency_type }}';
+          
+          const metadataSection = [
+            '\n\n**Dependabot Information:**\n',
+            `- **Package name(s):** ${dependencyNames}\n`,
+            `- **Update type:** ${updateType}\n`,
+            `- **Dependency type:** ${dependencyType}\n`,
+            `- **Previous version:** ${previousVersion}\n`,
+            `- **New version:** ${newVersion}\n\n`,
+            '**Modified Files:**\n',
+            `${filesList}`
+          ].join('');
+          
           let reason = '';
           
           if (!shouldMerge) {
@@ -643,7 +730,7 @@ runs:
             reason = `CI checks failed or timed out.`;
           }
           
-          const comment = `❌ **Not Automerged**\n\n${reason}`;
+          const comment = `❌ **Not Automerged**\n\n${reason}${metadataSection}`;
           
           await github.rest.issues.createComment({
             owner: context.repo.owner,
