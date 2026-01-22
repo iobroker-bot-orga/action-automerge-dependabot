@@ -605,7 +605,7 @@ runs:
               pull_number: prNumber,
             });
             
-            const filesList = files.map(f => `- ${f.filename}`).join('\n');
+            const filesList = files.length > 0 ? files.map(f => `- ${f.filename}`).join('\n') : '- (no files modified)';
             
             // Prepare dependabot metadata
             const dependencyNames = '${{ steps.dependabot-metadata.outputs.dependency-names }}';
