@@ -615,7 +615,19 @@ runs:
             const dependencyType = '${{ steps.metadata.outputs.dependency_type }}';
             
             // Add success comment to PR with enhanced information
-            const comment = `✅ **Automerged**\n\n**Reason:** ${matchReason}\n**Merge method:** ${mergeMethod}\n\n**Dependabot Information:**\n- **Package name(s):** ${dependencyNames}\n- **Update type:** ${updateType}\n- **Dependency type:** ${dependencyType}\n- **Previous version:** ${previousVersion}\n- **New version:** ${newVersion}\n\n**Modified Files:**\n- ${filesList}`;
+            const comment = [
+              '✅ **Automerged**\n',
+              `**Reason:** ${matchReason}\n`,
+              `**Merge method:** ${mergeMethod}\n\n`,
+              '**Dependabot Information:**\n',
+              `- **Package name(s):** ${dependencyNames}\n`,
+              `- **Update type:** ${updateType}\n`,
+              `- **Dependency type:** ${dependencyType}\n`,
+              `- **Previous version:** ${previousVersion}\n`,
+              `- **New version:** ${newVersion}\n\n`,
+              '**Modified Files:**\n',
+              `- ${filesList}`
+            ].join('');
             
             await github.rest.issues.createComment({
               owner: context.repo.owner,
