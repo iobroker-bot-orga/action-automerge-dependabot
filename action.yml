@@ -605,7 +605,7 @@ runs:
               pull_number: prNumber,
             });
             
-            const filesList = files.map(f => f.filename).join('\n- ');
+            const filesList = files.map(f => `- ${f.filename}`).join('\n');
             
             // Prepare dependabot metadata
             const dependencyNames = '${{ steps.dependabot-metadata.outputs.dependency-names }}';
@@ -626,7 +626,7 @@ runs:
               `- **Previous version:** ${previousVersion}\n`,
               `- **New version:** ${newVersion}\n\n`,
               '**Modified Files:**\n',
-              `- ${filesList}`
+              `${filesList}`
             ].join('');
             
             await github.rest.issues.createComment({
