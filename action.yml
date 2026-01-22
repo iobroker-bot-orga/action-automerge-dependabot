@@ -118,8 +118,9 @@ runs:
               # Trim whitespace from the single filename
               SINGLE_FILE=$(echo "$CHANGED_FILES" | xargs)
               
-              # Check if it's package-lock.json
-              if [[ "$SINGLE_FILE" == "package-lock.json" ]]; then
+              # Check if it's package-lock.json (in any directory)
+              # Use basename to check only the filename, not the full path
+              if [[ "$(basename "$SINGLE_FILE")" == "package-lock.json" ]]; then
                 echo "Only package-lock.json is changed, setting dependency_type to 'package-lock'"
                 DEPENDENCY_TYPE="package-lock"
               fi
