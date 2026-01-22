@@ -91,7 +91,10 @@ Create a file at `.github/auto-merge.yml` in your repository to define merge rul
 
 #### Configuration Options
 
-- `dependency_type`: `production` or `development`
+- `dependency_type`: `production`, `development`, or `package-lock`
+  - `production` - Direct production dependencies
+  - `development` - Development dependencies
+  - `package-lock` - Changes only to package-lock.json file
 - `update_type`: `semver:patch`, `semver:minor`, or `semver:major`
   - **Hierarchical matching**: Higher version changes include all lower changes
     - `semver:patch` - Only patch updates (e.g., 1.0.0 → 1.0.1)
@@ -130,14 +133,30 @@ Multiple rules for different dependency types:
     update_type: "semver:minor"  # Patch and minor for development
 ```
 
+Allow minor and patch updates for package-lock only changes:
+```yaml
+- match:
+    dependency_type: package-lock
+    update_type: "semver:minor"  # Patch and minor for package-lock.json only changes
+```
+
 **Note**: With hierarchical matching, you typically only need one rule per dependency type. For example, if you specify `semver:minor`, you don't need a separate rule for `semver:patch` since minor already includes patch updates.
+
+#### Package-Lock.json Only Changes
+
+When Dependabot creates a PR that only changes `package-lock.json` (no other files modified), the action automatically detects this and treats the dependency type as `package-lock`. This typically happens when a transitive dependency is updated.
+
+**Behavior:**
+- If a config file exists with a rule for `dependency_type: package-lock`, that rule is evaluated
+- If a config file exists but has no `package-lock` rule, minor and patch updates are merged by default
+- If no config file exists, minor and patch updates are merged by default (same as development dependencies)
 
 ### Default Rules
 
 If no configuration file is provided, the following default rules apply:
 
-- ✅ **Patch updates**: Always merged (both production and development)
-- ⚠️ **Minor updates**: Only merged for development dependencies
+- ✅ **Patch updates**: Always merged (production, development, and package-lock)
+- ⚠️ **Minor updates**: Only merged for development dependencies and package-lock only changes
 - ❌ **Major updates**: Never merged automatically
 
 ## How It Works

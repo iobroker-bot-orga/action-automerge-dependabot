@@ -56,6 +56,8 @@ runs:
     - name: Extract metadata for decision making
       id: metadata
       shell: bash
+      env:
+        GITHUB_TOKEN: ${{ inputs.github-token }}
       run: |
         # Extract update type from dependabot metadata
         # Format: "version-update:semver-patch", "version-update:semver-minor", "version-update:semver-major"
@@ -84,6 +86,47 @@ runs:
           DEPENDENCY_TYPE="development"
         else
           DEPENDENCY_TYPE="unknown"
+        fi
+        
+        # Check if only package-lock.json is changed when dependency_type is unknown
+        if [[ "$DEPENDENCY_TYPE" == "unknown" ]]; then
+          echo "Dependency type is unknown, checking if only package-lock.json is changed..."
+          
+          # Get the list of changed files in the PR
+          set +e  # Don't exit on error
+          CHANGED_FILES=$(gh api \
+            -H "Accept: application/vnd.github+json" \
+            -H "X-GitHub-Api-Version: 2022-11-28" \
+            "/repos/${{ github.repository }}/pulls/${{ github.event.pull_request.number }}/files" \
+            --jq '.[].filename' 2>&1)
+          API_EXIT_CODE=$?
+          set -e  # Re-enable exit on error
+          
+          if [[ $API_EXIT_CODE -ne 0 ]]; then
+            echo "Warning: Failed to fetch changed files from GitHub API"
+            echo "Error: $CHANGED_FILES"
+          elif [[ -n "$CHANGED_FILES" ]]; then
+            echo "Changed files:"
+            echo "$CHANGED_FILES"
+            
+            # Count lines (each filename is on a separate line)
+            # Use grep to count non-empty lines to avoid the wc -l empty string issue
+            FILE_COUNT=$(echo "$CHANGED_FILES" | grep -c '^' || echo 0)
+            
+            # Check if only one file is changed
+            if [[ $FILE_COUNT -eq 1 ]]; then
+              # Trim whitespace from the single filename
+              SINGLE_FILE=$(echo "$CHANGED_FILES" | xargs)
+              
+              # Check if it's package-lock.json
+              if [[ "$SINGLE_FILE" == "package-lock.json" ]]; then
+                echo "Only package-lock.json is changed, setting dependency_type to 'package-lock'"
+                DEPENDENCY_TYPE="package-lock"
+              fi
+            fi
+          else
+            echo "No changed files detected in the PR"
+          fi
         fi
         
         echo "dependency_type=$DEPENDENCY_TYPE" >> $GITHUB_OUTPUT
@@ -165,6 +208,9 @@ runs:
               console.log('Configuration rules:', JSON.stringify(config, null, 2));
               console.log('-'.repeat(80));
               
+              // Check if there's a rule for package-lock dependency type
+              const hasPackageLockRule = config.some(rule => rule.match && rule.match.dependency_type === 'package-lock');
+              
               // Check each match rule
               let ruleIndex = 0;
               for (const rule of config) {
@@ -227,7 +273,21 @@ runs:
                 }
               }
               
-              if (!shouldMerge) {
+              // If no rule matched and dependency type is package-lock, apply default rule for package-lock
+              if (!shouldMerge && dependencyType === 'package-lock' && !hasPackageLockRule) {
+                console.log('-'.repeat(80));
+                console.log('No explicit rule for package-lock found in config, applying default rule');
+                if (updateType === 'patch' || updateType === 'minor') {
+                  shouldMerge = true;
+                  matchReason = 'Default rule for package-lock: Minor and patch updates are merged';
+                  console.log('✅ ' + matchReason);
+                } else {
+                  matchReason = 'Default rule for package-lock: Major updates are not merged';
+                  console.log('❌ ' + matchReason);
+                }
+              }
+              
+              if (!shouldMerge && matchReason === '') {
                 matchReason = 'No configuration rule matched this update';
               }
             } catch (err) {
@@ -245,10 +305,10 @@ runs:
               matchReason = 'Default rule: Patch updates are always merged';
               console.log('✅ ' + matchReason);
             } else if (updateType === 'minor') {
-              // Merge minor updates for devDependencies only
-              if (dependencyType === 'development') {
+              // Merge minor updates for devDependencies and package-lock
+              if (dependencyType === 'development' || dependencyType === 'package-lock') {
                 shouldMerge = true;
-                matchReason = 'Default rule: Minor updates for devDependencies are merged';
+                matchReason = `Default rule: Minor updates for ${dependencyType} are merged`;
                 console.log('✅ ' + matchReason);
               } else {
                 matchReason = 'Default rule: Minor updates for production dependencies are not merged';
