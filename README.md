@@ -61,7 +61,7 @@ steps:
 |-------|-------------|----------|---------|
 | `github-token` | GitHub token with permissions to merge PRs | Yes | `${{ github.token }}` |
 | `config-file-path` | Path to the auto-merge configuration file | No | `.github/auto-merge.yml` |
-| `merge-method` | Merge method to use (`merge`, `squash`, or `rebase`) | No | `squash` |
+| `merge-method` | Merge method to use (`merge`, `squash`, or `rebase`) | No | `merge` |
 | `wait-for-checks` | Wait for other checks to complete before merging | No | `true` |
 | `max-wait-time` | Maximum time to wait for checks in seconds | No | `3600` |
 
