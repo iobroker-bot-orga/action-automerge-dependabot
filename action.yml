@@ -415,6 +415,22 @@ runs:
           await new Promise(resolve => setTimeout(resolve, 10000));
           console.log('Initial delay complete, starting to check for workflows');
           
+          // Check if PR is still open before starting to wait for checks
+          {
+            const { data: currentPR } = await github.rest.pulls.get({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              pull_number: prNumber,
+            });
+            if (currentPR.state !== 'open') {
+              console.log('='.repeat(80));
+              console.log(`⚠️  PR #${prNumber} is no longer open (state: ${currentPR.state}) - aborting`);
+              console.log('='.repeat(80));
+              core.setOutput('checks_passed', 'false');
+              return false;
+            }
+          }
+          
           // Wait for checks to complete
           const maxWaitTime = ${{ inputs.max-wait-time }} * 1000; // Convert to milliseconds
           const pollInterval = 45 * 1000; // 45 seconds
@@ -507,6 +523,22 @@ runs:
             });
             
             await new Promise(resolve => setTimeout(resolve, pollInterval));
+            
+            // Check if PR is still open after waiting
+            {
+              const { data: currentPR } = await github.rest.pulls.get({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                pull_number: prNumber,
+              });
+              if (currentPR.state !== 'open') {
+                console.log('='.repeat(80));
+                console.log(`⚠️  PR #${prNumber} is no longer open (state: ${currentPR.state}) - aborting`);
+                console.log('='.repeat(80));
+                core.setOutput('checks_passed', 'false');
+                return false;
+              }
+            }
           }
           
           // Timeout
@@ -608,8 +640,17 @@ runs:
           });
           pr = pr.data;
           
+          console.log(`PR state: ${pr.state}`);
           console.log(`PR mergeable_state: ${pr.mergeable_state}`);
           console.log(`PR mergeable: ${pr.mergeable}`);
+          
+          // Check if PR is still open before proceeding
+          if (pr.state !== 'open') {
+            console.log('='.repeat(80));
+            console.log(`⚠️  PR #${prNumber} is no longer open (state: ${pr.state}) - aborting merge`);
+            console.log('='.repeat(80));
+            return;
+          }
           
           // Wait for up to 60 minutes if mergeable_state is 'unknown' (rebase in progress)
           if (pr.mergeable_state === 'unknown') {
@@ -636,8 +677,17 @@ runs:
               });
               pr = prUpdate.data;
               
+              console.log(`PR state: ${pr.state}`);
               console.log(`PR mergeable_state: ${pr.mergeable_state}`);
               console.log(`PR mergeable: ${pr.mergeable}`);
+              
+              // Check if PR is still open
+              if (pr.state !== 'open') {
+                console.log('='.repeat(80));
+                console.log(`⚠️  PR #${prNumber} is no longer open (state: ${pr.state}) - aborting`);
+                console.log('='.repeat(80));
+                return;
+              }
               
               // Check if mergeable_state has changed
               if (pr.mergeable_state !== 'unknown') {
@@ -799,6 +849,19 @@ runs:
           const matchReason = '${{ steps.should-merge.outputs.match_reason }}';
           const checksPassedWait = '${{ steps.wait-for-checks.outputs.checks_passed }}';
           const checksPassedSkip = '${{ steps.skip-checks.outputs.checks_passed }}';
+          
+          // Check if PR is still open before adding comment
+          {
+            const { data: currentPR } = await github.rest.pulls.get({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              pull_number: prNumber,
+            });
+            if (currentPR.state !== 'open') {
+              console.log(`PR #${prNumber} is no longer open (state: ${currentPR.state}) - skipping comment`);
+              return;
+            }
+          }
           
           // Fetch PR metadata and files
           const { data: files } = await github.rest.pulls.listFiles({
