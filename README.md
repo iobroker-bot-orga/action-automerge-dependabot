@@ -2,6 +2,9 @@
 
 Automatically merge Dependabot PRs based on configurable rules. This action evaluates Dependabot PRs against your criteria and merges them automatically if they meet your requirements.
 
+> [!CAUTION]
+> This action is designed for use within the ioBroker ecosystem. Feel free to use it but be informed that changes in future versions might effect repositories outside of ioBroker ecosystem
+
 ## Features
 
 - ✅ **Flexible Configuration**: Define merge rules based on dependency type and update type
