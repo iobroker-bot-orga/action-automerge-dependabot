@@ -19,7 +19,7 @@ Automatically merge Dependabot PRs based on configurable rules. This action eval
 
 ### Basic Usage
 
-Create a workflow file (e.g., `.github/workflows/auto-merge.yml`) in your repository:
+Create a workflow file (e.g., `.github/workflows/automerge-dependabot.yml`) in your repository:
 
 ```yaml
 name: Auto-Merge Dependabot PRs
