@@ -39,7 +39,7 @@ jobs:
       
     steps:
       - name: Auto-merge Dependabot PRs
-        uses: iobroker-bot-orga/action-automerge-dependabot@main
+        uses: iobroker-bot-orga/action-automerge-dependabot@v1
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
 ```
@@ -49,7 +49,7 @@ jobs:
 ```yaml
 steps:
   - name: Auto-merge Dependabot PRs
-    uses: iobroker-bot-orga/action-automerge-dependabot@main
+    uses: iobroker-bot-orga/action-automerge-dependabot@v1
     with:
       github-token: ${{ secrets.GITHUB_TOKEN }}
       config-file-path: '.github/auto-merge.yml'
