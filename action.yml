@@ -582,6 +582,7 @@ runs:
           const prNumber = ${{ github.event.pull_request.number }};
           const mergeMethod = '${{ inputs.merge-method }}';
           const matchReason = '${{ steps.should-merge.outputs.match_reason }}';
+          const originalHeadSha = '${{ github.event.pull_request.head.sha }}';
           
           console.log('='.repeat(80));
           console.log('MERGING PR');
@@ -696,6 +697,16 @@ runs:
                 break;
               }
               
+              // Check if PR was rebased (HEAD SHA changed)
+              if (pr.head.sha !== originalHeadSha) {
+                console.log('='.repeat(80));
+                console.log(`⚠️  PR HEAD SHA changed from ${originalHeadSha} to ${pr.head.sha}`);
+                console.log('This indicates the PR was rebased. The action will be re-triggered for the new commit.');
+                console.log('Aborting merge to allow CI checks to run on the new commit.');
+                console.log('='.repeat(80));
+                return;
+              }
+              
               // Check if PR is no longer mergeable
               if (pr.mergeable === false) {
                 console.log('❌ PR is no longer mergeable');
@@ -746,6 +757,21 @@ runs:
             }
             
             console.log('='.repeat(80));
+          }
+          
+          // After resolving from unknown state (or immediately), check if PR was rebased
+          // (HEAD SHA changed from the original commit that triggered this workflow).
+          // If so, abort gracefully - the action will be re-triggered for the new commit
+          // and CI checks must pass for that new commit before merging.
+          if (pr.head.sha !== originalHeadSha) {
+            console.log('='.repeat(80));
+            console.log('⚠️  PR HEAD SHA has changed - PR was rebased after CI checks completed');
+            console.log(`   Original SHA: ${originalHeadSha}`);
+            console.log(`   Current SHA:  ${pr.head.sha}`);
+            console.log('Aborting merge. The action will be re-triggered for the new commit.');
+            console.log('CI checks must pass for the new commit before merging.');
+            console.log('='.repeat(80));
+            return;
           }
           
           // Log final mergeable state before attempting merge
