@@ -242,6 +242,27 @@ runs:
           console.log(`Config file exists: ${configExists}`);
           console.log('='.repeat(80));
           
+          // Check if PR body contains a no-automerge marker
+          // Accepts: <!-- automerge: no --> (HTML comment, spacing-tolerant)
+          //          DO NOT AUTOMERGE (visible text, case-insensitive)
+          const prBody = context.payload.pull_request && context.payload.pull_request.body || '';
+          const noAutomergeComment = /<!--\s*automerge\s*:\s*no\s*-->/i;
+          const noAutomergeText = /do\s+not\s+automerge/i;
+          const hasCommentMarker = noAutomergeComment.test(prBody);
+          const hasTextMarker = noAutomergeText.test(prBody);
+          
+          if (hasCommentMarker || hasTextMarker) {
+            const detectedMarker = hasCommentMarker ? '<!-- automerge: no -->' : 'DO NOT AUTOMERGE';
+            console.log('='.repeat(80));
+            console.log('🚫 NO-AUTOMERGE MARKER DETECTED');
+            console.log(`Detected marker: ${detectedMarker}`);
+            console.log('DECISION: WILL NOT AUTOMERGE');
+            console.log('='.repeat(80));
+            core.setOutput('should_merge', 'false');
+            core.setOutput('match_reason', `No-automerge marker detected in PR body: \`${detectedMarker}\``);
+            return false;
+          }
+          
           let shouldMerge = false;
           let matchReason = '';
           
@@ -893,7 +914,11 @@ runs:
           let reason = '';
           
           if (!shouldMerge) {
-            reason = `The PR does not match any automerge rules.\n\n**Details:** ${matchReason}`;
+            if (matchReason && matchReason.startsWith('No-automerge marker detected')) {
+              reason = `🚫 Automerge was disabled by a marker in the PR body.\n\n**Details:** ${matchReason}`;
+            } else {
+              reason = `The PR does not match any automerge rules.\n\n**Details:** ${matchReason}`;
+            }
           } else {
             // If shouldMerge is true but we're in this step, checks must have failed
             // (the step condition ensures we only run when checks didn't pass)
